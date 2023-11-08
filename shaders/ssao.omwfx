@@ -1,0 +1,80 @@
+uniform_float cfg_intensity {
+    default = 0.5;
+    min = 0.0;
+    max = 1.0;
+    step = 0.1;
+    display_name = "Intensity";
+}
+
+uniform_float cfg_falloff {
+    default = 10.0;
+    min = 0.1;
+    max = 50.0;
+    step = 0.1;
+    display_name = "Falloff";
+}
+
+uniform_float cfg_radius {
+    default = 0.01;
+    min = 0.001;
+    max = 0.05;
+    step = 0.001;
+    display_name = "Radius";
+}
+
+uniform_int cfg_samples {
+    default = 30;
+    min = 5;
+    max = 100;
+    step = 1;
+    display_name = "Samples";
+}
+
+fragment ssao {
+    omw_In vec2 omw_TexCoord;
+
+    vec3 norm_at(vec2 uv) {
+        return vec3(omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
+    }
+
+    void main() {
+        vec4 old_col = omw_Texture2D(omw_SamplerLastShader, omw_TexCoord);
+        if (OMW_NORMALS != 1) {
+            omw_FragColor = old_col * vec4(1.0, 0.0, 0.0, 1.0);
+            return;
+        }
+
+        vec3 wpos = omw_GetWorldPosFromUV(omw_TexCoord);
+        float depth = omw_GetLinearDepth(omw_TexCoord);
+        float inv_depth = 1.0 / depth;
+        vec3 norm = norm_at(omw_TexCoord);
+
+        float ssao = 0.0;
+        float total = 0.0;
+        float t = dot(sin(omw_TexCoord * 10000.0), vec2(1.0));
+        for (int i = 0; i < cfg_samples; i ++) {
+            float dist = 0.1 + fract(t * 0.79);
+            vec2 offs = sin(vec2(0.0, 1.571) + t) * cfg_radius * dist;
+            vec2 pos = omw_TexCoord + offs;
+
+            float depth2 = omw_GetLinearDepth(pos);
+            float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * 25.0);
+            vec3 norm2 = norm_at(pos);
+            ssao += 1.0 / (1.0 + max(dot(norm.xy - norm2.xy, offs), 0.0) * 100000.0 * max(1.0 - depth2 * inv_depth, 0.0)) * weight;
+            total += weight;
+            t += 2.9;
+        }
+
+        vec3 col = old_col.rgb * mix(1.0, pow(min(ssao / total, 1.0), cfg_falloff), cfg_intensity);
+
+        omw_FragColor = vec4(col.rgb, 1.0);
+    }
+}
+
+technique {
+    passes = ssao;
+    version = "0.1";
+    description = "Screen-space ambient occlusion for OpenMW";
+    author = "zesterer";
+    pass_normals = true;
+}
