@@ -1,5 +1,11 @@
+uniform_bool cfg_enabled {
+    default = true;
+    display_name = "Enabled";
+    description = "Whether the effect is enabled (useful for quick comparisons). If you want to permanently remove the effect, disable the whole shader instead of using this option.";
+}
+
 uniform_float cfg_intensity {
-    default = 3.5;
+    default = 7.5;
     min = 0.0;
     max = 20.0;
     step = 0.1;
@@ -8,7 +14,7 @@ uniform_float cfg_intensity {
 }
 
 uniform_float cfg_radius {
-    default = 35.0;
+    default = 16.0;
     min = 2.0;
     max = 100.0;
     step = 1.0;
@@ -17,16 +23,16 @@ uniform_float cfg_radius {
 }
 
 uniform_float cfg_depth_compensation {
-    default = 25.0;
+    default = 10.0;
     min = 0.0;
-    max = 50.0;
-    step = 1.0;
+    max = 15.0;
+    step = 0.1;
     display_name = "Depth Compensation";
     description = "The extent to which occlusion is regulated by the relative depth to the occluder.";
 }
 
 uniform_int cfg_samples {
-    default = 30;
+    default = 20;
     min = 5;
     max = 100;
     step = 1;
@@ -40,53 +46,131 @@ uniform_bool cfg_debug {
     description = "Makes it easier to see the effect of occlusion by removing other lighting effects.";
 }
 
+sampler_2d noise {
+    source = "textures/noise.png";
+    mag_filter = nearest;
+    min_filter = nearest;
+    wrap_s = repeat;
+    wrap_t = repeat;
+    source_format = red;
+    internal_format = red;
+    source_type = unsigned_byte;
+}
+
+shared {
+    const int N = 7;
+    const float kernel[N] = float[](0.0016,	0.0372,	0.2394,	0.4436,	0.2394,	0.0372,	0.0016);
+    const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0);
+
+    /* const int N = 5; */
+    /* const float kernel[N] = float[](0.0013, 0.1573, 0.6827, 0.1573, 0.0013); */
+    /* const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0); */
+
+    /* const int N = 9; */
+    /* const float kernel[N] = float[](0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002); */
+    /* const float taps[N] = float[](-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0); */
+
+    vec2 rcpResolution = 1.0 / omw.resolution * 1.15;
+}
+
 fragment ssao {
     omw_In vec2 omw_TexCoord;
 
+    #define HORIZON 100000000
+
     vec3 norm_at(vec2 uv) {
-        return vec3(omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
+        return (omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
+    }
+    vec2 norm2_at(vec2 uv) {
+        return vec2(omw_Texture2D(omw_SamplerNormals, uv).xy - 0.5) * 2.0;
+    }
+
+    float hash_two(uvec2 q) {
+        #define M1 2047667443U
+        #define M2 3883706873U
+
+        q *= uvec2(M1, M2);
+        uint n = q.x ^ q.y;
+        n = n * (n ^ (n >> 15));
+        return float(n) * (1.0 / float(0xffffffffU));
     }
 
     void main() {
-        vec4 old_col = omw_Texture2D(omw_SamplerLastShader, omw_TexCoord);
-        if (OMW_NORMALS != 1) {
-            omw_FragColor = old_col * vec4(1.0, 0.0, 0.0, 1.0);
-            return;
-        }
-
         float depth = omw_GetLinearDepth(omw_TexCoord);
         float inv_depth = 1.0 / depth;
-        float dist_mul = cfg_radius / sqrt(depth + 0.001);
-        vec3 norm = norm_at(omw_TexCoord);
+        float dist_mul = cfg_radius / min(depth * 0.05 + 0.01, sqrt(depth + 0.01));
+        vec2 norm = norm2_at(omw_TexCoord);
 
         float ssao = 0.0;
         float total = 0.0;
-        float t = dot(sin(omw_TexCoord * 10000.0), vec2(1.0));
-        for (int i = 0; i < cfg_samples; i ++) {
-            float dist = 0.1 + fract(t * 0.79) * dist_mul;
-            vec2 offs = sin(vec2(0.0, 1.571) + t) * 0.01 * dist;
-            vec2 pos = omw_TexCoord + offs;
+        if (depth > HORIZON) {
+            ssao = 1.0;
+            total = 1.0;
+        } else {
+            float t = hash_two(uvec2(omw_TexCoord * omw.resolution));//omw_Texture2D(noise, omw_TexCoord * omw.resolution * cfg).x * 6.28;
+            for (int i = 0; i < cfg_samples; i ++) {
+                float dist = 0.1 + pow(fract(t * 22.8), 2) * dist_mul;
+                vec2 offs = sin(vec2(0.0, 1.571) + t) * 0.01 * dist;
+                vec2 pos = omw_TexCoord + offs;
 
-            float depth2 = omw_GetLinearDepth(pos);
-            float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation);
-            vec3 norm2 = norm_at(pos);
-            ssao += 0.01 / (0.01 + max(dot(norm.xy - norm2.xy, offs), 0.0)) * weight;
-            total += weight;
-            t += 2.9;
+                float depth2 = omw_GetLinearDepth(pos);
+                vec2 norm2 = norm2_at(pos);
+                float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation);
+                ssao += 0.01 / (0.01 + max(dot((norm - norm2), offs), 0.0)) * weight;
+                total += weight;
+                t += 2.4;
+            }
         }
 
+        omw_FragColor = vec4(vec3(ssao / total), 1.0);
+    }
+}
+
+fragment blur_v {
+    omw_In vec2 omw_TexCoord;
+
+    void main()
+    {
+        float ssao = 0.0;
+        for(int i = 0; i < N; i ++)
+            ssao += omw_GetLastPass(omw_TexCoord + vec2(0, rcpResolution.y * taps[i])).x * kernel[i];
+
+        omw_FragColor = vec4(vec3(ssao), 1.0);
+    }
+}
+
+fragment blur_h {
+    omw_In vec2 omw_TexCoord;
+
+    void main()
+    {
+        vec4 old_col;
         if (cfg_debug) {
             old_col.rgb = vec3(1.0);
+        } else {
+            old_col = omw_GetLastShader(omw_TexCoord);
+            if (OMW_NORMALS != 1) {
+                omw_FragColor = old_col * vec4(1.0, 0.0, 0.0, 1.0);
+                return;
+            }
         }
 
-        vec3 col = old_col.rgb * pow(min(ssao / total, 1.0), cfg_intensity);
+        float ssao = 0.0;
+        for(int i = 0; i < N; i ++)
+            ssao += omw_GetLastPass(omw_TexCoord + vec2(rcpResolution.x * taps[i], 0)).x * kernel[i];
 
-        omw_FragColor = vec4(col.rgb, 1.0);
+        if (!cfg_enabled) {
+            ssao = 1.0;
+        }
+
+        old_col.rgb *= mix(pow(min(ssao, 1.0), cfg_intensity), 1.0, omw_EstimateFogCoverageFromUV(omw_TexCoord));
+
+        omw_FragColor = old_col;
     }
 }
 
 technique {
-    passes = ssao;
+    passes = ssao, blur_v, blur_h;
     version = "0.1";
     description = "Screen-space ambient occlusion for OpenMW";
     author = "zesterer";
