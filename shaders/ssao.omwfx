@@ -32,7 +32,7 @@ uniform_int cfg_samples {
     max = 400;
     step = 1;
     display_name = "Samples";
-    description = "The number of samples taken to determine occlusion. More samples means better quality occlusion, but worse performance.";
+    description = "The number of samples taken to determine occlusion. More samples means less visual noise, but worse performance.";
 }
 
 uniform_float cfg_blur_factor {
@@ -41,7 +41,7 @@ uniform_float cfg_blur_factor {
     max = 1.5;
     step = 0.1;
     display_name = "Blur";
-    description = "The extent to which the AO is blurred to reduce artifacts, at the cost of sharpness.";
+    description = "The amount of blurring applied to the occlusion to reduce visual noise, at the cost of sharpness.";
 }
 
 uniform_bool cfg_enabled {
@@ -208,9 +208,7 @@ fragment combine(rt1 = ao_downsample) {
             }
         }
 
-        float ssao = 0.0;
-        for(int i = 0; i < N; i ++)
-            ssao += omw_Texture2D(ao_downsample, omw_TexCoord + vec2(rcpResolution.x * taps[i], 0)).x * kernel[i];
+        float ssao = omw_Texture2D(ao_downsample, omw_TexCoord).x;
 
         if (!cfg_enabled) {
             ssao = 1.0;
@@ -225,7 +223,7 @@ fragment combine(rt1 = ao_downsample) {
 }
 
 technique {
-    passes = ssao, blur_v, combine;
+    passes = ssao, blur_v, blur_h, combine;
     version = "0.1";
     description = "Screen-space ambient occlusion for OpenMW";
     author = "zesterer";
