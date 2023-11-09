@@ -71,16 +71,16 @@ shared {
     /* const float taps[N] = float[](-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0); */
 
     vec2 rcpResolution = 1.0 / omw.resolution * 1.15;
+
+    vec3 norm_at(vec2 uv) {
+        return (omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
+    }
 }
 
 fragment ssao {
     omw_In vec2 omw_TexCoord;
 
     #define HORIZON 100000000
-
-    vec3 norm_at(vec2 uv) {
-        return (omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
-    }
     vec2 norm2_at(vec2 uv) {
         return vec2(omw_Texture2D(omw_SamplerNormals, uv).xy - 0.5) * 2.0;
     }
@@ -102,9 +102,14 @@ fragment ssao {
         vec2 norm = norm2_at(omw_TexCoord);
         float depth_comp = 1.0 / cfg_depth_compensation;
 
+        vec3 wpos = omw_GetWorldPosFromUV(omw_TexCoord);
+
         float ssao = 0.0;
         float total = 0.0;
-        if (depth > HORIZON) {
+        if (depth > HORIZON
+            || (wpos.z < omw.waterHeight + 10.0 && !omw.isUnderwater)
+            || (wpos.z > omw.waterHeight - 10.0 && omw.isUnderwater))
+        {
             ssao = 1.0;
             total = 1.0;
         } else {
@@ -165,6 +170,8 @@ fragment blur_h {
         }
 
         old_col.rgb *= mix(pow(min(ssao, 1.0), cfg_intensity), 1.0, omw_EstimateFogCoverageFromUV(omw_TexCoord));
+
+        /* old_col.rgb = norm_at(omw_TexCoord); */
 
         omw_FragColor = old_col;
     }
