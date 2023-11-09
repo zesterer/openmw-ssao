@@ -1,25 +1,25 @@
 uniform_float cfg_intensity {
-    default = 0.5;
+    default = 3.5;
     min = 0.0;
-    max = 1.0;
+    max = 20.0;
     step = 0.1;
     display_name = "Intensity";
 }
 
-uniform_float cfg_falloff {
-    default = 10.0;
-    min = 0.1;
-    max = 50.0;
-    step = 0.1;
-    display_name = "Falloff";
+uniform_float cfg_radius {
+    default = 35.0;
+    min = 5.0;
+    max = 100.0;
+    step = 1.0;
+    display_name = "Radius";
 }
 
-uniform_float cfg_radius {
-    default = 0.01;
-    min = 0.001;
-    max = 0.025;
-    step = 0.001;
-    display_name = "Radius";
+uniform_float cfg_dist_compensation {
+    default = 25.0;
+    min = 0.0;
+    max = 50.0;
+    step = 1.0;
+    display_name = "Distance Compensation";
 }
 
 uniform_int cfg_samples {
@@ -28,6 +28,11 @@ uniform_int cfg_samples {
     max = 100;
     step = 1;
     display_name = "Samples";
+}
+
+uniform_bool cfg_debug {
+    default = false;
+    display_name = "Debug";
 }
 
 fragment ssao {
@@ -44,28 +49,32 @@ fragment ssao {
             return;
         }
 
-        vec3 wpos = omw_GetWorldPosFromUV(omw_TexCoord);
         float depth = omw_GetLinearDepth(omw_TexCoord);
         float inv_depth = 1.0 / depth;
+        float dist_mul = cfg_radius / sqrt(depth + 0.001);
         vec3 norm = norm_at(omw_TexCoord);
 
         float ssao = 0.0;
         float total = 0.0;
         float t = dot(sin(omw_TexCoord * 10000.0), vec2(1.0));
         for (int i = 0; i < cfg_samples; i ++) {
-            float dist = 0.1 + fract(t * 0.79);
-            vec2 offs = sin(vec2(0.0, 1.571) + t) * cfg_radius * dist;
+            float dist = 0.1 + fract(t * 0.79) * dist_mul;
+            vec2 offs = sin(vec2(0.0, 1.571) + t) * 0.01 * dist;
             vec2 pos = omw_TexCoord + offs;
 
             float depth2 = omw_GetLinearDepth(pos);
-            float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * 25.0);
+            float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * cfg_dist_compensation);
             vec3 norm2 = norm_at(pos);
-            ssao += 1.0 / (1.0 + max(dot(norm.xy - norm2.xy, offs), 0.0) * 100000.0 * max(1.0 - depth2 * inv_depth, 0.0) * norm.z) * weight;
+            ssao += 0.01 / (0.01 + max(dot(norm.xy - norm2.xy, offs), 0.0)) * weight;
             total += weight;
             t += 2.9;
         }
 
-        vec3 col = old_col.rgb * mix(1.0, pow(min(ssao / total, 1.0), cfg_falloff), cfg_intensity);
+        if (cfg_debug) {
+            old_col.rgb = vec3(1.0);
+        }
+
+        vec3 col = old_col.rgb * pow(min(ssao / total, 1.0), cfg_intensity);
 
         omw_FragColor = vec4(col.rgb, 1.0);
     }
