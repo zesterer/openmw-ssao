@@ -5,7 +5,7 @@ uniform_bool cfg_enabled {
 }
 
 uniform_float cfg_intensity {
-    default = 7.5;
+    default = 5.0;
     min = 0.0;
     max = 20.0;
     step = 0.1;
@@ -14,7 +14,7 @@ uniform_float cfg_intensity {
 }
 
 uniform_float cfg_radius {
-    default = 20.0;
+    default = 30.0;
     min = 2.0;
     max = 200.0;
     step = 1.0;
@@ -58,8 +58,12 @@ sampler_2d noise {
 }
 
 shared {
+    /* const int N = 7; */
+    /* const float kernel[N] = float[](0.0016,    0.0372,    0.2394,    0.4436,    0.2394,    0.0372,    0.0016); */
+    /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
+
     const int N = 7;
-    const float kernel[N] = float[](0.0016,	0.0372,	0.2394,	0.4436,	0.2394,	0.0372,	0.0016);
+    const float kernel[N] = float[](0.0713,	0.1315,	0.1899,	0.2146,	0.1899,	0.1315,	0.0713);
     const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0);
 
     /* const int N = 5; */
@@ -98,7 +102,7 @@ fragment ssao {
     void main() {
         float depth = omw_GetLinearDepth(omw_TexCoord);
         float inv_depth = 1.0 / depth;
-        float dist_mul = cfg_radius / min(depth * 0.05 + 0.01, sqrt(depth + 0.01));
+        float dist_mul = cfg_radius / (10.0 + sqrt(depth) * 0.15);
         vec2 norm = norm2_at(omw_TexCoord);
         float depth_comp = 1.0 / cfg_depth_compensation;
 
@@ -106,16 +110,19 @@ fragment ssao {
 
         float ssao = 0.0;
         float total = 0.0;
-        if (depth > HORIZON
+        // Always apply AO in interiors, and not on the skybox
+        if (!omw.isInterior && (depth > HORIZON
+            // AO shouldn't appear underwater if the camera is above water
             || (wpos.z < omw.waterHeight + 10.0 && !omw.isUnderwater)
-            || (wpos.z > omw.waterHeight - 10.0 && omw.isUnderwater))
+            // AO shouldn't appear above water if the camera is underwater
+            || (wpos.z > omw.waterHeight - 10.0 && omw.isUnderwater)))
         {
             ssao = 1.0;
             total = 1.0;
         } else {
-            float t = hash_two(uvec2(omw_TexCoord * omw.resolution));//omw_Texture2D(noise, omw_TexCoord * omw.resolution * cfg).x * 6.28;
+            float t = hash_two(uvec2(omw_TexCoord * omw.resolution));
             for (int i = 0; i < cfg_samples; i ++) {
-                float dist = 0.1 + pow(fract(t * 22.8), 2) * dist_mul;
+                float dist = 0.1 + pow(fract(t * 22.8), 1) * dist_mul;
                 vec2 offs = sin(vec2(0.0, 1.571) + t) * 0.01 * dist;
                 vec2 pos = omw_TexCoord + offs;
 
@@ -150,6 +157,19 @@ fragment blur_h {
 
     void main()
     {
+        float ssao = 0.0;
+        for(int i = 0; i < N; i ++)
+            ssao += omw_GetLastPass(omw_TexCoord + vec2(rcpResolution.x * taps[i], 0)).x * kernel[i];
+
+        omw_FragColor = vec4(vec3(ssao), 1.0);
+    }
+}
+
+fragment combine {
+    omw_In vec2 omw_TexCoord;
+
+    void main()
+    {
         vec4 old_col;
         if (cfg_debug) {
             old_col.rgb = vec3(1.0);
@@ -169,7 +189,7 @@ fragment blur_h {
             ssao = 1.0;
         }
 
-        old_col.rgb *= mix(pow(min(ssao, 1.0), cfg_intensity), 1.0, omw_EstimateFogCoverageFromUV(omw_TexCoord));
+        old_col.rgb *= mix(smoothstep(0.0, 1.0, pow(min(ssao, 1.0), cfg_intensity)), 1.0, omw_EstimateFogCoverageFromUV(omw_TexCoord));
 
         /* old_col.rgb = norm_at(omw_TexCoord); */
 
@@ -178,7 +198,7 @@ fragment blur_h {
 }
 
 technique {
-    passes = ssao, blur_v, blur_h;
+    passes = ssao, blur_v, combine;
     version = "0.1";
     description = "Screen-space ambient occlusion for OpenMW";
     author = "zesterer";
