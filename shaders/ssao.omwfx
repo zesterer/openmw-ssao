@@ -4,22 +4,25 @@ uniform_float cfg_intensity {
     max = 20.0;
     step = 0.1;
     display_name = "Intensity";
+    description = "Determines the strength of the effect.";
 }
 
 uniform_float cfg_radius {
     default = 35.0;
-    min = 5.0;
+    min = 2.0;
     max = 100.0;
     step = 1.0;
     display_name = "Radius";
+    description = "Controls the radius of occlusion effects.";
 }
 
-uniform_float cfg_dist_compensation {
+uniform_float cfg_depth_compensation {
     default = 25.0;
     min = 0.0;
     max = 50.0;
     step = 1.0;
-    display_name = "Distance Compensation";
+    display_name = "Depth Compensation";
+    description = "The extent to which occlusion is regulated by the relative depth to the occluder.";
 }
 
 uniform_int cfg_samples {
@@ -28,11 +31,13 @@ uniform_int cfg_samples {
     max = 100;
     step = 1;
     display_name = "Samples";
+    description = "The number of samples taken to determine occlusion. More samples means better quality occlusion, but worse performance.";
 }
 
 uniform_bool cfg_debug {
     default = false;
     display_name = "Debug";
+    description = "Makes it easier to see the effect of occlusion by removing other lighting effects.";
 }
 
 fragment ssao {
@@ -63,7 +68,7 @@ fragment ssao {
             vec2 pos = omw_TexCoord + offs;
 
             float depth2 = omw_GetLinearDepth(pos);
-            float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * cfg_dist_compensation);
+            float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation);
             vec3 norm2 = norm_at(pos);
             ssao += 0.01 / (0.01 + max(dot(norm.xy - norm2.xy, offs), 0.0)) * weight;
             total += weight;
