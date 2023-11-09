@@ -27,12 +27,21 @@ uniform_float cfg_depth_compensation {
 }
 
 uniform_int cfg_samples {
-    default = 25;
+    default = 30;
     min = 5;
     max = 400;
     step = 1;
     display_name = "Samples";
     description = "The number of samples taken to determine occlusion. More samples means better quality occlusion, but worse performance.";
+}
+
+uniform_float cfg_blur_factor {
+    default = 1.0;
+    min = 0.0;
+    max = 1.5;
+    step = 0.1;
+    display_name = "Blur";
+    description = "The extent to which the AO is blurred to reduce artifacts, at the cost of sharpness.";
 }
 
 uniform_bool cfg_enabled {
@@ -73,23 +82,26 @@ render_target ao_downsample {
 }
 
 shared {
+    const float UPSCALE = 0.5;
+    const float UPSCALE_INV = 1.0 / UPSCALE;
+
     /* const int N = 7; */
     /* const float kernel[N] = float[](0.0016,    0.0372,    0.2394,    0.4436,    0.2394,    0.0372,    0.0016); */
     /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
 
-    const int N = 7;
-    const float kernel[N] = float[](0.0713,	0.1315,	0.1899,	0.2146,	0.1899,	0.1315,	0.0713);
-    const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0);
+    /* const int N = 7; */
+    /* const float kernel[N] = float[](0.0713,    0.1315,    0.1899,    0.2146,    0.1899,    0.1315,    0.0713); */
+    /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
 
-    /* const int N = 5; */
-    /* const float kernel[N] = float[](0.0013, 0.1573, 0.6827, 0.1573, 0.0013); */
-    /* const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0); */
+    const int N = 5;
+    const float kernel[N] = float[](0.1226,	0.2331,	0.2887,	0.2331,	0.1226);
+    const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0);
 
     /* const int N = 9; */
     /* const float kernel[N] = float[](0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002); */
     /* const float taps[N] = float[](-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0); */
 
-    vec2 rcpResolution = omw.rcpResolution * 1.15;
+    vec2 rcpResolution = omw.rcpResolution * 1.15 * UPSCALE_INV * cfg_blur_factor;
 
     vec3 norm_at(vec2 uv) {
         return (omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
