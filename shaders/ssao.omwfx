@@ -14,9 +14,9 @@ uniform_float cfg_intensity {
 }
 
 uniform_float cfg_radius {
-    default = 16.0;
+    default = 20.0;
     min = 2.0;
-    max = 100.0;
+    max = 200.0;
     step = 1.0;
     display_name = "Radius";
     description = "Controls the radius of occlusion effects.";
