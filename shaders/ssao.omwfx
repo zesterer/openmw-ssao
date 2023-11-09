@@ -23,10 +23,10 @@ uniform_float cfg_radius {
 }
 
 uniform_float cfg_depth_compensation {
-    default = 10.0;
-    min = 0.0;
-    max = 15.0;
-    step = 0.1;
+    default = 0.1;
+    min = 0.0001;
+    max = 0.5;
+    step = 0.01;
     display_name = "Depth Compensation";
     description = "The extent to which occlusion is regulated by the relative depth to the occluder.";
 }
@@ -100,6 +100,7 @@ fragment ssao {
         float inv_depth = 1.0 / depth;
         float dist_mul = cfg_radius / min(depth * 0.05 + 0.01, sqrt(depth + 0.01));
         vec2 norm = norm2_at(omw_TexCoord);
+        float depth_comp = 1.0 / cfg_depth_compensation;
 
         float ssao = 0.0;
         float total = 0.0;
@@ -115,7 +116,7 @@ fragment ssao {
 
                 float depth2 = omw_GetLinearDepth(pos);
                 vec2 norm2 = norm2_at(pos);
-                float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation);
+                float weight = 1.0 / (dist + abs(1.0 - depth2 * inv_depth) * depth_comp);
                 ssao += 0.01 / (0.01 + max(dot((norm - norm2), offs), 0.0)) * weight;
                 total += weight;
                 t += 2.4;
