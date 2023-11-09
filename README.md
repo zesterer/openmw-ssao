@@ -11,3 +11,5 @@
 - Downsampling & blurring support: Reduce the performance hit with minimal impact on visual quality.
 
 - Behaves correctly with complex scenes: No more 'occlusion halo' artifacts.
+
+- Handles fog and water elegantly: No 'phantom' occlusion for objects hidden behind fog or under the water.
