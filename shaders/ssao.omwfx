@@ -1,20 +1,20 @@
 uniform_float cfg_intensity {
-    header = "General";
+    header = "Configuration";
     default = 5.0;
     min = 0.0;
     max = 20.0;
     step = 0.1;
     display_name = "Intensity";
-    description = "Determines the strength of the effect.";
+    description = "Determines the strength of the effect. Higher values make occlusion more blotchy and artificial.";
 }
 
 uniform_float cfg_radius {
     default = 60.0;
     min = 2.0;
-    max = 200.0;
+    max = 400.0;
     step = 1.0;
     display_name = "Radius";
-    description = "Controls the radius of occlusion effects.";
+    description = "Controls the radius of occlusion effects. Higher values result in fuller and more context-sensitive shadows, at the cost of more noise.";
 }
 
 uniform_float cfg_threshold {
@@ -23,16 +23,16 @@ uniform_float cfg_threshold {
     max = 0.15;
     step = 0.01;
     display_name = "Occlusion Threshold";
-    description = "The approximate occlusion threshold at which shadowing begins to occur.";
+    description = "The approximate occlusion threshold at which shadowing begins to occur. Lower values cause surfaces without any occlusion to become occluded.";
 }
 
 uniform_float cfg_depth_compensation {
     default = 2.5;
     min = 0.0;
     max = 5.0;
-    step = 0.01;
+    step = 0.1;
     display_name = "Depth Compensation";
-    description = "The extent to which occlusion is regulated by the relative depth to the occluder.";
+    description = "The extent to which occlusion is regulated by the relative depth to the occluder. Lower values produce 'occlusion halos' typical of poor early SSAO implementations.";
 }
 
 uniform_int cfg_samples {
@@ -50,20 +50,20 @@ uniform_float cfg_blur_factor {
     max = 1.5;
     step = 0.1;
     display_name = "Blur";
-    description = "The amount of blurring applied to the occlusion to reduce visual noise, at the cost of sharpness.";
+    description = "The amount of blurring applied to the occlusion to reduce visual noise, at the cost of sharpness. Lower values mean more precise occlusion, but increased visual noise.";
 }
 
 uniform_bool cfg_enabled {
-    header = "Debug";
+    header = "Debugging";
     default = true;
     display_name = "Enabled";
-    description = "Whether the effect is enabled (useful for quick comparisons). If you want to permanently remove the effect, disable the whole shader instead of using this option.";
+    description = "Whether the effect is enabled. Useful for quick comparisons. If you want to permanently remove the effect, disable the whole shader instead of using this option since it only skips applying occlusion, not the calculation of occlusion.";
 }
 
 uniform_bool cfg_debug {
     default = false;
-    display_name = "Debug";
-    description = "Makes it easier to see the effect of occlusion by removing other lighting effects.";
+    display_name = "Debug View";
+    description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
 }
 
 sampler_2d noise {
