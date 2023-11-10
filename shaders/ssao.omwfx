@@ -17,6 +17,15 @@ uniform_float cfg_radius {
     description = "Controls the radius of occlusion effects.";
 }
 
+uniform_float cfg_threshold {
+    default = 0.0;
+    min = -0.15;
+    max = 0.15;
+    step = 0.01;
+    display_name = "Occlusion Threshold";
+    description = "The approximate occlusion threshold at which shadowing begins to occur.";
+}
+
 uniform_float cfg_depth_compensation {
     default = 2.5;
     min = 0.0;
@@ -139,9 +148,9 @@ fragment ssao(target = ao_downsample) {
         // Always apply AO in interiors, and not on the skybox
         if (!omw.isInterior && (depth > HORIZON
             // AO shouldn't appear underwater if the camera is above water
-            || (wpos.z < omw.waterHeight + 10.0 && !omw.isUnderwater)
+            || (wpos.z < omw.waterHeight + 1.0 && !omw.isUnderwater)
             // AO shouldn't appear above water if the camera is underwater
-            || (wpos.z > omw.waterHeight - 10.0 && omw.isUnderwater)))
+            || (wpos.z > omw.waterHeight - 1.0 && omw.isUnderwater)))
         {
             ssao = 1.0;
             total = 1.0;
@@ -156,7 +165,7 @@ fragment ssao(target = ao_downsample) {
                 vec2 norm2 = norm2_at(pos);
                 float weight = 1.0 / dist;
                 float ignore = clamp(abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation, 0.0, 1.0);
-                ssao += weight * mix(0.01 / (0.01 + max(dot((norm - norm2), offs), 0.0)), 1.0, ignore);
+                ssao += weight * mix(0.01 / (0.01 + max(dot((norm - norm2), offs), 0.0)) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
             }
@@ -214,7 +223,9 @@ fragment combine(rt1 = ao_downsample) {
             ssao = 1.0;
         }
 
-        old_col.rgb *= mix(smoothstep(0.0, 1.0, pow(min(ssao, 1.0), cfg_intensity)), 1.0, omw_EstimateFogCoverageFromUV(omw_TexCoord));
+        // Apply threshold
+        //ssao = clamp(1.0 - (1.0 - ssao - cfg_threshold) / (1.0 - cfg_threshold), 0.0, 1.0);
+        old_col.rgb *= mix(smoothstep(0.0, 1.0, pow(ssao, cfg_intensity)), 1.0, omw_EstimateFogCoverageFromUV(omw_TexCoord));
 
         /* old_col.rgb = norm_at(omw_TexCoord); */
 
@@ -225,7 +236,7 @@ fragment combine(rt1 = ao_downsample) {
 technique {
     passes = ssao, blur_v, blur_h, combine;
     version = "0.1";
-    description = "Screen-space ambient occlusion for OpenMW";
+    description = "Screen-space ambient occlusion for OpenMW. This mod is normal-aware, so make sure to install a normal map mod to get the best out of it.";
     author = "zesterer";
     pass_normals = true;
 }
