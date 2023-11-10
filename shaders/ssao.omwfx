@@ -8,6 +8,15 @@ uniform_float cfg_intensity {
     description = "Determines the strength of the effect. Higher values make occlusion more blotchy and artificial.";
 }
 
+uniform_int cfg_samples {
+    default = 30;
+    min = 5;
+    max = 400;
+    step = 1;
+    display_name = "Samples";
+    description = "The number of samples taken to determine occlusion. More samples means less visual noise, but worse performance.";
+}
+
 uniform_float cfg_radius {
     default = 60.0;
     min = 2.0;
@@ -32,16 +41,7 @@ uniform_float cfg_depth_compensation {
     max = 5.0;
     step = 0.1;
     display_name = "Depth Compensation";
-    description = "The extent to which occlusion is regulated by the relative depth to the occluder. Lower values produce 'occlusion halos' typical of poor early SSAO implementations.";
-}
-
-uniform_int cfg_samples {
-    default = 30;
-    min = 5;
-    max = 400;
-    step = 1;
-    display_name = "Samples";
-    description = "The number of samples taken to determine occlusion. More samples means less visual noise, but worse performance.";
+    description = "The extent to which occlusion is affected by the relative depth of the occluding surface. Lower values produce 'occlusion halos' typical of poor early SSAO implementations.";
 }
 
 uniform_float cfg_blur_factor {
@@ -103,7 +103,7 @@ shared {
     /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
 
     const int N = 5;
-    const float kernel[N] = float[](0.1226,	0.2331,	0.2887,	0.2331,	0.1226);
+    const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693);
     const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0);
 
     /* const int N = 9; */
