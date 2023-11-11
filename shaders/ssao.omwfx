@@ -63,10 +63,10 @@ uniform_float cfg_blur_factor {
 }
 
 uniform_float cfg_temporal_filtering {
-    default = 0.75;
+    default = 0.9;
     min = 0.0;
     max = 1.0;
-    step = 0.1;
+    step = 0.05;
     display_name = "Temporal Filtering";
     description = "The amount of AO sampling information reused from previous frames. Higher values massively improve AO quality at the cost of minor artifacts on moving scene elements.";
 }
@@ -279,7 +279,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                     if (last.x * last.y > 0.0) {
                         float marker_invalid = abs(last.y - marker) * 30000.0 * inv_depth;
                         float result_changed = max(abs(ssao_final - last.x) - 0.0, 0.0);
-                        float temporal_factor = max(mix(0.8, 0.99, cfg_temporal_filtering) - marker_invalid - result_changed * 1.0, 0.0);
+                        float temporal_factor = max(mix(0.8, 0.999, cfg_temporal_filtering) - marker_invalid - result_changed * 0.3, 0.0);
                         omw_FragColor = vec4(ssao_final * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
                         return;
                     }
