@@ -13,8 +13,8 @@ uniform_int cfg_samples {
     min = 5;
     max = 400;
     step = 1;
-    display_name = "Samples";
-    description = "The number of samples taken to determine occlusion. More samples means less visual noise, but worse performance.";
+    display_name = "Max Samples";
+    description = "The maximum number of samples taken per-pixel to determine occlusion. More samples means less visual noise, but worse performance.";
 }
 
 uniform_float cfg_radius {
@@ -207,7 +207,8 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             float t = hash_two(uvec2(omw_TexCoord * omw.resolution));
             if (cfg_temporal_filtering > 0.0) { t += omw.simulationTime; }
             if (cfg_temporal_filter_when_paused) { t += omw_Texture2D(ao_next, omw_TexCoord).x * 10.0; }
-            for (int i = 0; i < cfg_samples; i ++) {
+            float stable_samples = 1.0 + float(cfg_samples) * 0.2;
+            for (int i = 0; i < cfg_samples && total < stable_samples; i ++) {
                 float dist = 0.1 + fract(t * 22.8) * dist_mul;
                 vec2 offs = sin(vec2(0.0, 1.571) + t) * 0.01 * dist;
                 vec2 pos = omw_TexCoord + offs;
@@ -216,6 +217,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                 vec2 norm2 = norm2_at(pos);
                 float weight = 1.0 / dist;
                 float ignore = clamp(abs(1.0 - depth2 * inv_depth) * min(1.0, depth * 0.004) * cfg_depth_compensation, 0.0, 1.0);
+                weight *= (1.0 - ignore) + 0.01;
                 ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0)) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
@@ -228,9 +230,14 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                 if (abs(prev_spos.x) < 1.0 && abs(prev_spos.y) < 1.0) {
                     vec2 last = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5).xy;
                     float marker = marker(depth);
-                    float temporal_factor = max(mix(0.8, 0.95, cfg_temporal_filtering) - abs(last.y - marker) * depth * 0.03, 0.0);
-                    omw_FragColor = vec4(ssao / total * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
-                    return;
+                    float ssao_final = ssao / total;
+                    /* if (last.y > 0.0 && last.x > 0.0) { */
+                        float marker_invalid = abs(last.y - marker) * depth * 0.3;
+                        float result_changed = max(abs(ssao_final - last.x) - 0.0, 0.0) * inv_depth * 300.0;
+                        float temporal_factor = max(mix(0.8, 0.95, cfg_temporal_filtering) - marker_invalid * result_changed, 0.0);
+                        omw_FragColor = vec4(ssao_final * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
+                        return;
+                    /* } */
                 }
             }
         }
