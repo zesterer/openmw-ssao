@@ -178,7 +178,6 @@ shared {
 fragment ssao(target = ao_buf0, rt1 = ao_next) {
     omw_In vec2 omw_TexCoord;
 
-    #define HORIZON 100000000
     vec2 norm2_at(vec2 uv) {
         return vec2(omw_Texture2D(omw_SamplerNormals, uv).xy - 0.5) * 2.0;
     }
@@ -218,7 +217,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         float depth = omw_GetLinearDepth(omw_TexCoord);
         float inv_depth = 1.0 / (depth + 0.001);
         float dist_mul = cfg_radius / (10.0 + pow(depth, 0.75) * 0.15);
-        vec3 norm = norm_at(omw_TexCoord);
+        vec2 norm = norm2_at(omw_TexCoord);
 
         vec3 wpos = omw_GetWorldPosFromUV(omw_TexCoord);
         float marker_d = distance(wpos, omw.eyePos.xyz) * 0.003 + 3.0;
@@ -231,14 +230,14 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         float ssao = 0.0;
         float total = 0.0;
         // Always apply AO in interiors, and not on the skybox
-        if (!omw.isInterior && (depth > HORIZON
+        if (!omw.isInterior && (depth > omw.far * 0.99
             // AO shouldn't appear underwater if the camera is above water
             || (wpos.z < omw.waterHeight + 1.0 && !omw.isUnderwater)
             // AO shouldn't appear above water if the camera is underwater
             || (wpos.z > omw.waterHeight - 1.0 && omw.isUnderwater)))
         {
-            ssao = float(cfg_samples);
-            total = float(cfg_samples);
+            ssao = 1.0;
+            total = 1.0;
         } else {
             float t = hash_two(uvec2(omw_TexCoord * omw.resolution));
             if (cfg_temporal_filtering > 0.0) { t += omw.simulationTime * t * 10.0; }
