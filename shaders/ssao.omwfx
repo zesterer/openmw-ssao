@@ -9,7 +9,7 @@ uniform_float cfg_intensity {
 }
 
 uniform_int cfg_samples {
-    default = 50;
+    default = 30;
     min = 5;
     max = 400;
     step = 1;
@@ -92,8 +92,8 @@ uniform_bool cfg_temporal_filter_when_paused {
 
 sampler_2d noise {
     source = "textures/noise.png";
-    mag_filter = nearest;
-    min_filter = nearest;
+    mag_filter = linear;
+    min_filter = linear;
     wrap_s = repeat;
     wrap_t = repeat;
     source_format = red;
@@ -119,8 +119,8 @@ render_target ao_buf1 {
     mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
-    width_ratio = 0.5;
-    height_ratio = 0.5;
+    width_ratio = 1.0;
+    height_ratio = 1.0;
     internal_format = red;
     source_type = float;
     source_format = red;
@@ -141,7 +141,7 @@ render_target ao_next {
 }
 
 shared {
-    const float UPSCALE = 0.5;
+    const float UPSCALE = 1.0;
     const float UPSCALE_INV = 1.0 / UPSCALE;
 
     /* const int N = 7; */
@@ -159,6 +159,10 @@ shared {
     const int N = 3;
     const float kernel[N] = float[](0.3195,    0.3611,    0.3195);
     const float taps[N] = float[](-1.0, 0.0, 1.0);
+
+    const int BOX = 4;
+    const float boxx[4] = float[](-1.0,  1.0, -1.0, 1.0);
+    const float boxy[4] = float[](-1.0, -1.0,  1.0, 1.0);
 
     /* const int N = 9; */
     /* const float kernel[N] = float[](0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002); */
@@ -179,18 +183,35 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         return vec2(omw_Texture2D(omw_SamplerNormals, uv).xy - 0.5) * 2.0;
     }
 
-    float hash_two(uvec2 q) {
-        #define M1 2047667443U
-        #define M2 3883706873U
+    #define M1 204766743
+    #define M2 388370683
+    #define M3 396128171
 
+    float hash_one(int q) {
+        int n = ((M3 * q) ^ M2) * M1;
+        return float(n) * (1.0 / float(0xffffffffu));
+    }
+    vec4 hash_one4(ivec4 q) {
+        ivec4 n = ((M3 * q) ^ M2) * M1;
+        return vec4(n) * (1.0 / float(0xffffffffu));
+    }
+
+    float hash_two(uvec2 q) {
         q *= uvec2(M1, M2);
         uint n = q.x ^ q.y;
         n = n * (n ^ (n >> 15));
         return float(n) * (1.0 / float(0xffffffffU));
     }
 
-    float marker(float x) {
-        return 1000.0 / (x + 0.001);
+    float noise_3d(vec3 pos) {
+        pos.z *= 25.0;
+        int z = int(floor(pos.z));
+        vec4 offs = hash_one4(ivec4(z, z + 73, z + 1, z + 74));
+        return mix(
+            omw_Texture2D(noise, pos.xy + offs.xy).x,
+            omw_Texture2D(noise, pos.xy + offs.zw).x,
+            fract(pos.z)
+        );
     }
 
     void main() {
@@ -200,6 +221,12 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         vec3 norm = norm_at(omw_TexCoord);
 
         vec3 wpos = omw_GetWorldPosFromUV(omw_TexCoord);
+        float marker_d = distance(wpos, omw.eyePos.xyz) * 0.003 + 3.0;
+        float marker = mix(
+            noise_3d((wpos * 0.01) / floor(marker_d)),
+            noise_3d((wpos * 0.01) / floor(marker_d + 1.0)),
+            fract(marker_d)
+        ) * 0.7 + 0.5;
 
         float ssao = 0.0;
         float total = 0.0;
@@ -214,7 +241,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             total = float(cfg_samples);
         } else {
             float t = hash_two(uvec2(omw_TexCoord * omw.resolution));
-            if (cfg_temporal_filtering > 0.0) { t += omw.simulationTime; }
+            if (cfg_temporal_filtering > 0.0) { t += omw.simulationTime * t * 10.0; }
             if (cfg_temporal_filter_when_paused) { t += omw_Texture2D(ao_next, omw_TexCoord).x * 10.0; }
             float stable_samples = 1.0 + float(cfg_samples) * 0.2;
             for (int i = 0; i < cfg_samples && total < stable_samples; i ++) {
@@ -238,20 +265,29 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
 
                 if (abs(prev_spos.x) < 1.0 && abs(prev_spos.y) < 1.0) {
                     vec2 last = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5).xy;
-                    float marker = marker(depth);
+
+                    // If the marker was substantially out of range, try to repair the missing information by
+                    // 'borrowing' from nearby pixels
+                    if (abs(last.y - marker) * inv_depth > 0.00001) {
+                        for (int i = 0; i < BOX; i ++) {
+                            vec2 last2 = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5 + omw.rcpResolution * UPSCALE_INV * vec2(boxx[i], boxy[i])).xy;
+                            if (abs(last2.y - marker) < abs(last.y - marker)) { last = last2; }
+                        }
+                    }
+
                     float ssao_final = ssao / total;
-                    /* if (last.y > 0.0 && last.x > 0.0) { */
-                        float marker_invalid = abs(last.y - marker) * depth;
-                        float result_changed = max(abs(ssao_final - last.x) - 0.0, 0.0) * inv_depth;
-                        float temporal_factor = max(mix(0.8, 0.95, cfg_temporal_filtering) - marker_invalid * result_changed * 100.0, 0.0);
+                    if (last.x * last.y > 0.0) {
+                        float marker_invalid = abs(last.y - marker) * 30000.0 * inv_depth;
+                        float result_changed = max(abs(ssao_final - last.x) - 0.0, 0.0);
+                        float temporal_factor = max(mix(0.8, 0.99, cfg_temporal_filtering) - marker_invalid - result_changed * 1.0, 0.0);
                         omw_FragColor = vec4(ssao_final * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
                         return;
-                    /* } */
+                    }
                 }
             }
         }
 
-        omw_FragColor = vec4(ssao / total, marker(depth), 0.0, 1.0);
+        omw_FragColor = vec4(ssao / total, marker, 0.0, 1.0);
     }
 }
 
