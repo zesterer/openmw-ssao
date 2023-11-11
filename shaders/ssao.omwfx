@@ -143,13 +143,13 @@ shared {
     /* const float kernel[N] = float[](0.0713,    0.1315,    0.1899,    0.2146,    0.1899,    0.1315,    0.0713); */
     /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
 
-    const int N = 5;
-    const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693);
-    const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0);
+    /* const int N = 5; */
+    /* const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693); */
+    /* const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0); */
 
-    /* const int N = 3; */
-    /* const float kernel[N] = float[](0.3195,    0.3611,    0.3195); */
-    /* const float taps[N] = float[](-1.0, 0.0, 1.0); */
+    const int N = 3;
+    const float kernel[N] = float[](0.3195,    0.3611,    0.3195);
+    const float taps[N] = float[](-1.0, 0.0, 1.0);
 
     /* const int N = 9; */
     /* const float kernel[N] = float[](0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002); */
