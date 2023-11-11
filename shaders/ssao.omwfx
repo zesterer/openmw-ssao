@@ -18,7 +18,7 @@ uniform_int cfg_samples {
 }
 
 uniform_float cfg_radius {
-    default = 120.0;
+    default = 110.0;
     min = 2.0;
     max = 400.0;
     step = 1.0;
@@ -99,9 +99,9 @@ render_target ao_buf0 {
     wrap_t = clamp_to_edge;
     width_ratio = 1.0;
     height_ratio = 1.0;
-    internal_format = red;
+    internal_format = rg;
     source_type = float;
-    source_format = red;
+    source_format = rg;
     mipmaps = false;
 }
 
@@ -110,8 +110,8 @@ render_target ao_buf1 {
     mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
-    width_ratio = 1.0;
-    height_ratio = 1.0;
+    width_ratio = 0.5;
+    height_ratio = 0.5;
     internal_format = red;
     source_type = float;
     source_format = red;
@@ -125,9 +125,9 @@ render_target ao_next {
     wrap_t = clamp_to_edge;
     width_ratio = 1.0;
     height_ratio = 1.0;
-    internal_format = red;
+    internal_format = rg;
     source_type = float;
-    source_format = red;
+    source_format = rg;
     mipmaps = false;
 }
 
@@ -180,11 +180,15 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         return float(n) * (1.0 / float(0xffffffffU));
     }
 
+    float marker(float x) {
+        return 1000.0 / (x + 0.001);
+    }
+
     void main() {
         float depth = omw_GetLinearDepth(omw_TexCoord);
-        float inv_depth = 1.0 / depth;
+        float inv_depth = 1.0 / (depth + 0.001);
         float dist_mul = cfg_radius / (10.0 + pow(depth, 0.75) * 0.15);
-        vec2 norm = norm2_at(omw_TexCoord);
+        vec3 norm = norm_at(omw_TexCoord);
 
         vec3 wpos = omw_GetWorldPosFromUV(omw_TexCoord);
 
@@ -212,25 +216,28 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                 vec2 norm2 = norm2_at(pos);
                 float weight = 1.0 / dist;
                 float ignore = clamp(abs(1.0 - depth2 * inv_depth) * min(1.0, depth * 0.004) * cfg_depth_compensation, 0.0, 1.0);
-                ssao += weight * mix(0.01 / (0.01 + max(dot((norm - norm2), offs), 0.0)) + cfg_threshold, 1.0, ignore);
+                ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0)) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
             }
 
             if (cfg_temporal_filtering > 0.0) {
-                float temporal_factor = mix(0.8, 0.95, cfg_temporal_filtering);
-
                 vec4 prev_spos = (omw.projectionMatrix * (omw.prevViewMatrix * vec4(wpos, 1.0)));
                 prev_spos.xyz /= prev_spos.w;
 
                 if (abs(prev_spos.x) < 1.0 && abs(prev_spos.y) < 1.0) {
-                    omw_FragColor = vec4(vec3(ssao / total * (1.0 - temporal_factor) + omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5).x * temporal_factor), 1.0);
-                    return;
+                    vec2 last = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5).xy;
+                    float marker = marker(depth);
+                    float temporal_factor = max(mix(0.8, 0.95, cfg_temporal_filtering) - (last.y - marker) * (last.y - marker) * depth * 0.3, 0.0);
+                    if (last.x > 0.0) { // Guard against weird NaN bug in OpenMW
+                        omw_FragColor = vec4(ssao / total * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
+                        return;
+                    }
                 }
             }
         }
 
-        omw_FragColor = vec4(vec3(ssao / total), 1.0);
+        omw_FragColor = vec4(ssao / total, marker(norm.y), 0.0, 1.0);
     }
 }
 
@@ -238,7 +245,7 @@ fragment copy(target = ao_next, rt1 = ao_buf0) {
     omw_In vec2 omw_TexCoord;
 
     void main() {
-        omw_FragColor = vec4(omw_Texture2D(ao_buf0, omw_TexCoord).x);
+        omw_FragColor = vec4(omw_Texture2D(ao_buf0, omw_TexCoord).xy, 0.0, 1.0);
     }
 }
 
