@@ -2,8 +2,11 @@
 
 ## Features
 
-- Normal-aware: Unlike most SSAO shader mods, this shader takes the surface normal into account and so interacts properly with normal
-  maps and other sub-polygon surface lighting techniques.
+- Normal-aware: Unlike most SSAO shader mods, this shader takes the surface normal into account and so interacts
+  properly with normal maps and other sub-polygon surface lighting techniques.
+
+- Temporal filtering: occlusion information is shared between frames, radically improving the quality of occlusion
+  without hurting performance.
 
 - Many parameters to configure: Find your personal sweet-spoot between quality and performance while achieving the
   look and feel you're after.
