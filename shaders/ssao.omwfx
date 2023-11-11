@@ -54,7 +54,7 @@ uniform_float cfg_blur_factor {
 }
 
 uniform_float cfg_temporal_filtering {
-    default = 0.4;
+    default = 0.75;
     min = 0.0;
     max = 1.0;
     step = 0.1;
@@ -228,16 +228,14 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                 if (abs(prev_spos.x) < 1.0 && abs(prev_spos.y) < 1.0) {
                     vec2 last = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5).xy;
                     float marker = marker(depth);
-                    float temporal_factor = max(mix(0.8, 0.95, cfg_temporal_filtering) - (last.y - marker) * (last.y - marker) * depth * 0.3, 0.0);
-                    if (last.x > 0.0) { // Guard against weird NaN bug in OpenMW
-                        omw_FragColor = vec4(ssao / total * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
-                        return;
-                    }
+                    float temporal_factor = max(mix(0.8, 0.95, cfg_temporal_filtering) - abs(last.y - marker) * depth * 0.03, 0.0);
+                    omw_FragColor = vec4(ssao / total * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
+                    return;
                 }
             }
         }
 
-        omw_FragColor = vec4(ssao / total, marker(norm.y), 0.0, 1.0);
+        omw_FragColor = vec4(ssao / total, marker(depth), 0.0, 1.0);
     }
 }
 
