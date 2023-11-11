@@ -1,6 +1,6 @@
 uniform_float cfg_intensity {
     header = "Configuration";
-    default = 6.0;
+    default = 6.5;
     min = 0.0;
     max = 20.0;
     step = 0.1;
@@ -18,7 +18,7 @@ uniform_int cfg_samples {
 }
 
 uniform_float cfg_radius {
-    default = 110.0;
+    default = 130.0;
     min = 2.0;
     max = 400.0;
     step = 1.0;
@@ -152,13 +152,13 @@ shared {
     /* const float kernel[N] = float[](0.0713,    0.1315,    0.1899,    0.2146,    0.1899,    0.1315,    0.0713); */
     /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
 
-    /* const int N = 5; */
-    /* const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693); */
-    /* const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0); */
+    const int N = 5;
+    const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693);
+    const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0);
 
-    const int N = 3;
-    const float kernel[N] = float[](0.3195,    0.3611,    0.3195);
-    const float taps[N] = float[](-1.0, 0.0, 1.0);
+    /* const int N = 3; */
+    /* const float kernel[N] = float[](0.3195,    0.3611,    0.3195); */
+    /* const float taps[N] = float[](-1.0, 0.0, 1.0); */
 
     const int BOX = 4;
     const float boxx[4] = float[](-1.0,  1.0, -1.0, 1.0);
@@ -225,7 +225,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             noise_3d((wpos * 0.01) / floor(marker_d)),
             noise_3d((wpos * 0.01) / floor(marker_d + 1.0)),
             fract(marker_d)
-        ) * 0.7 + 0.5;
+        );
 
         float ssao = 0.0;
         float total = 0.0;
@@ -242,7 +242,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             float t = hash_two(uvec2(omw_TexCoord * omw.resolution));
             if (cfg_temporal_filtering > 0.0) { t += omw.simulationTime * t * 10.0; }
             if (cfg_temporal_filter_when_paused) { t += omw_Texture2D(ao_next, omw_TexCoord).x * 10.0; }
-            float stable_samples = 1.0 + float(cfg_samples) * 0.2;
+            float stable_samples = 1.0 + float(cfg_samples) * 0.3;
             for (int i = 0; i < cfg_samples && total < stable_samples; i ++) {
                 float dist = 0.01 + fract(t * 22.8) * dist_mul;
                 vec2 offs = sin(vec2(0.0, 1.571) + t) * 0.01 * dist;
@@ -275,8 +275,8 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                     }
 
                     float ssao_final = ssao / total;
-                    if (last.x * last.y > 0.0) {
-                        float marker_invalid = abs(last.y - marker) * 30000.0 * inv_depth;
+                    if (last.x + last.y > 0.0) {
+                        float marker_invalid = abs(last.y - marker) * 2000.0 * sqrt(inv_depth);
                         float result_changed = max(abs(ssao_final - last.x) - 0.0, 0.0);
                         float temporal_factor = max(mix(0.8, 0.999, cfg_temporal_filtering) - marker_invalid - result_changed * 0.3, 0.0);
                         omw_FragColor = vec4(ssao_final * (1.0 - temporal_factor) + last.x * temporal_factor, marker, 0.0, 1.0);
