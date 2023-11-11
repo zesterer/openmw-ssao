@@ -9,7 +9,7 @@ uniform_float cfg_intensity {
 }
 
 uniform_int cfg_samples {
-    default = 25;
+    default = 50;
     min = 5;
     max = 400;
     step = 1;
@@ -33,6 +33,15 @@ uniform_float cfg_threshold {
     step = 0.01;
     display_name = "Occlusion Threshold";
     description = "The approximate occlusion threshold at which shadowing begins to occur. Lower values cause surfaces without any occlusion to become occluded.";
+}
+
+uniform_float cfg_normal_intensity {
+    default = 1.0;
+    min = 0.0;
+    max = 1.0;
+    step = 0.05;
+    display_name = "Normal Adjustment";
+    description = "How strongly surface normals contribute to the occlusion effect. You might want to reduce this setting in the presence of overly strong normal maps.";
 }
 
 uniform_float cfg_depth_compensation {
@@ -218,7 +227,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                 float weight = 1.0 / dist;
                 float ignore = clamp(abs(1.0 - depth2 * inv_depth) * min(1.0, depth * 0.004) * cfg_depth_compensation, 0.0, 1.0);
                 weight *= (1.0 - ignore) + 0.01;
-                ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0)) + cfg_threshold, 1.0, ignore);
+                ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0) * cfg_normal_intensity) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
             }
