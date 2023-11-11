@@ -45,7 +45,7 @@ uniform_float cfg_depth_compensation {
 }
 
 uniform_float cfg_blur_factor {
-    default = 0.0;
+    default = 1.0;
     min = 0.0;
     max = 1.5;
     step = 0.1;
@@ -93,8 +93,8 @@ sampler_2d noise {
 }
 
 render_target ao_buf0 {
-    min_filter = nearest;
-    mag_filter = nearest;
+    min_filter = linear;
+    mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
     width_ratio = 1.0;
@@ -106,8 +106,8 @@ render_target ao_buf0 {
 }
 
 render_target ao_buf1 {
-    min_filter = nearest;
-    mag_filter = nearest;
+    min_filter = linear;
+    mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
     width_ratio = 1.0;
@@ -119,8 +119,8 @@ render_target ao_buf1 {
 }
 
 render_target ao_next {
-    min_filter = nearest;
-    mag_filter = nearest;
+    min_filter = linear;
+    mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
     width_ratio = 1.0;
@@ -143,13 +143,13 @@ shared {
     /* const float kernel[N] = float[](0.0713,    0.1315,    0.1899,    0.2146,    0.1899,    0.1315,    0.0713); */
     /* const float taps[N] = float[](-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0); */
 
-    /* const int N = 5; */
-    /* const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693); */
-    /* const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0); */
+    const int N = 5;
+    const float kernel[N] = float[](0.1693, 0.2146, 0.2322, 0.2146, 0.1693);
+    const float taps[N] = float[](-2.0, -1.0, 0.0, 1.0, 2.0);
 
-    const int N = 3;
-    const float kernel[N] = float[](0.3195,	0.3611,	0.3195);
-    const float taps[N] = float[](-1.0, 0.0, 1.0);
+    /* const int N = 3; */
+    /* const float kernel[N] = float[](0.3195,    0.3611,    0.3195); */
+    /* const float taps[N] = float[](-1.0, 0.0, 1.0); */
 
     /* const int N = 9; */
     /* const float kernel[N] = float[](0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002); */
@@ -200,7 +200,8 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             ssao = float(cfg_samples);
             total = float(cfg_samples);
         } else {
-            float t = hash_two(uvec2(omw_TexCoord * omw.resolution)) + omw.simulationTime;
+            float t = hash_two(uvec2(omw_TexCoord * omw.resolution));
+            if (cfg_temporal_filtering > 0.0) { t += omw.simulationTime; }
             if (cfg_temporal_filter_when_paused) { t += omw_Texture2D(ao_next, omw_TexCoord).x * 10.0; }
             for (int i = 0; i < cfg_samples; i ++) {
                 float dist = 0.1 + fract(t * 22.8) * dist_mul;
@@ -210,7 +211,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                 float depth2 = omw_GetLinearDepth(pos);
                 vec2 norm2 = norm2_at(pos);
                 float weight = 1.0 / dist;
-                float ignore = clamp(abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation, 0.0, 1.0);
+                float ignore = clamp(abs(1.0 - depth2 * inv_depth) * min(1.0, depth * 0.004) * cfg_depth_compensation, 0.0, 1.0);
                 ssao += weight * mix(0.01 / (0.01 + max(dot((norm - norm2), offs), 0.0)) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
@@ -247,14 +248,15 @@ fragment blur_v(target = ao_buf1, rt1 = ao_buf0) {
     void main()
     {
         // No need to continue, blurring skips intermediate buffers
-        if (cfg_blur_factor == 0.0) { return; }
-
-        float ssao = 0.0;
-        for(int i = 0; i < N; i ++) {
-            ssao += omw_Texture2D(ao_buf0, omw_TexCoord + vec2(0.0, rcpResolution.y * taps[i])).x * kernel[i];
+        if (cfg_blur_factor == 0.0) {
+             omw_FragColor = vec4(vec3(omw_Texture2D(ao_buf0, omw_TexCoord).x), 1.0);
+        } else {
+            float ssao = 0.0;
+            for(int i = 0; i < N; i ++) {
+                ssao += omw_Texture2D(ao_buf0, omw_TexCoord + vec2(0.0, rcpResolution.y * taps[i])).x * kernel[i];
+            }
+            omw_FragColor = vec4(vec3(ssao), 1.0);
         }
-
-        omw_FragColor = vec4(vec3(ssao), 1.0);
     }
 }
 
@@ -264,14 +266,15 @@ fragment blur_h(target = ao_buf0, rt1 = ao_buf1) {
     void main()
     {
         // No need to continue, blurring skips intermediate buffers
-        if (cfg_blur_factor == 0.0) { return; }
-
-        float ssao = 0.0;
-        for(int i = 0; i < N; i ++) {
-            ssao += omw_Texture2D(ao_buf1, omw_TexCoord + vec2(rcpResolution.x * taps[i], 0.0)).x * kernel[i];
+        if (cfg_blur_factor == 0.0) {
+             omw_FragColor = vec4(vec3(omw_Texture2D(ao_buf1, omw_TexCoord).x), 1.0);
+        } else {
+            float ssao = 0.0;
+            for(int i = 0; i < N; i ++) {
+                ssao += omw_Texture2D(ao_buf1, omw_TexCoord + vec2(rcpResolution.x * taps[i], 0.0)).x * kernel[i];
+            }
+            omw_FragColor = vec4(vec3(ssao), 1.0);
         }
-
-        omw_FragColor = vec4(vec3(ssao), 1.0);
     }
 }
 
@@ -307,7 +310,7 @@ fragment combine(rt1 = ao_buf0) {
 }
 
 technique {
-    passes = ssao, copy, combine;
+    passes = ssao, copy, blur_v, blur_h, combine;
     version = "0.1";
     description = "Screen-space ambient occlusion for OpenMW. This mod is normal-aware, so make sure to install a normal map mod to get the best out of it.";
     author = "zesterer";
