@@ -96,6 +96,12 @@ uniform_bool cfg_debug_marker {
     description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
 }
 
+uniform_bool cfg_debug_borrow {
+    default = false;
+    display_name = "Debug Borrow";
+    description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
+}
+
 uniform_bool cfg_temporal_filter_when_paused {
     default = false;
     display_name = "Temporal Filter When Paused";
@@ -118,8 +124,8 @@ render_target ao_buf0 {
     mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
-    width_ratio = 1.0;
-    height_ratio = 1.0;
+    width_ratio = 0.5;
+    height_ratio = 0.5;
     internal_format = rgb;
     source_type = float;
     source_format = rgb;
@@ -131,8 +137,8 @@ render_target ao_buf1 {
     mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
-    width_ratio = 1.0;
-    height_ratio = 1.0;
+    width_ratio = 0.5;
+    height_ratio = 0.5;
     internal_format = red;
     source_type = float;
     source_format = red;
@@ -144,8 +150,8 @@ render_target ao_next {
     mag_filter = linear;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
-    width_ratio = 1.0;
-    height_ratio = 1.0;
+    width_ratio = 0.5;
+    height_ratio = 0.5;
     internal_format = rgb;
     source_type = float;
     source_format = rg;
@@ -153,7 +159,7 @@ render_target ao_next {
 }
 
 shared {
-    const float UPSCALE = 1.0;
+    const float UPSCALE = 0.5;
     const float UPSCALE_INV = 1.0 / UPSCALE;
 
     /* const int N = 7; */
@@ -255,6 +261,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         float ssao = 0.0;
         float last_ssao = 0.0;
         float blend_factor = 0.0;
+        float borrow = 0.0;
         // Always apply AO in interiors, and not on the skybox
         if (!omw.isInterior && (depth > omw.far * 0.99
             // AO shouldn't appear underwater if the camera is above water
@@ -274,12 +281,13 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
 
                     // If the marker was substantially out of range, try to repair the missing information by
                     // 'borrowing' from nearby pixels
-                    if (vmax(abs(last.yz - marker)) * inv_depth > 0.00001) {
-                        for (int i = 0; i < BOX; i ++) {
-                            vec3 last2 = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5 + omw.rcpResolution * UPSCALE_INV * vec2(boxx[i], boxy[i])).xyz;
-                            if (vmax(abs(last2.yz - marker)) < vmax(abs(last.yz - marker))) { last = last2; }
-                        }
-                    }
+                    /* if (vmax(abs(last.yz - marker)) * inv_depth > 0.01) { */
+                    /*     borrow = 1.0; */
+                    /*     for (int i = 0; i < BOX; i ++) { */
+                    /*         vec3 last2 = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5 + omw.rcpResolution * UPSCALE_INV * vec2(boxx[i], boxy[i])).xyz; */
+                    /*         if (vmax(abs(last2.yz - marker)) < vmax(abs(last.yz - marker))) { last = last2; } */
+                    /*     } */
+                    /* } */
                     last_ssao = last.x;
                     blend_factor = mix(0.8, 0.98, cfg_temporal_filtering) / (1.0 + max(0.0, vmax(abs(last.yz - marker) * inv_depth) - 0.000001) * 100000.0);
                     samples = int(float(cfg_samples) * (1.0 - blend_factor * 0.8));
@@ -305,7 +313,8 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             }
             ssao /= total + 0.0001;
 
-            blend_factor *= max(0.0, 1.0 - max(0.0, (ssao - last_ssao) / (last_ssao + 0.001) - 0.01) * 1000.0 * inv_depth);
+            float reject_changed = max(0.0, 1.0 - max(0.0, (ssao - last_ssao) / (last_ssao + 0.001) - 0.01) * 1000.0 * 0.035 * sqrt(inv_depth));
+            blend_factor *= reject_changed;
         }
 
         if (cfg_debug_blend) {
@@ -313,6 +322,9 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             blend_factor = 0.0;
         } else if (cfg_debug_marker) {
             ssao = marker.x;
+            blend_factor = 0.0;
+        } else if (cfg_debug_borrow) {
+            ssao = borrow;
             blend_factor = 0.0;
         }
         omw_FragColor = vec4(ssao * (1.0 - blend_factor) + last_ssao * blend_factor, marker, 1.0);
