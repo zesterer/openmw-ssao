@@ -1,6 +1,6 @@
 uniform_float cfg_intensity {
     header = "Configuration";
-    default = 4.0;
+    default = 4.5;
     min = 0.0;
     max = 20.0;
     step = 0.1;
@@ -18,7 +18,7 @@ uniform_int cfg_samples {
 }
 
 uniform_float cfg_radius {
-    default = 80.0;
+    default = 65.0;
     min = 2.0;
     max = 400.0;
     step = 1.0;
@@ -63,10 +63,10 @@ uniform_float cfg_blur_factor {
 }
 
 uniform_float cfg_temporal_filtering {
-    default = 0.95;
-    min = 0.25;
-    max = 0.95;
-    step = 0.05;
+    default = 0.5;
+    min = 0.0;
+    max = 1.0;
+    step = 0.1;
     display_name = "Temporal Filtering";
     description = "The amount of AO sampling information reused from previous frames. Higher values massively improve AO quality at the cost of minor artifacts on moving scene elements.";
 }
@@ -86,26 +86,20 @@ uniform_bool cfg_debug {
 
 uniform_bool cfg_debug_blend {
     default = false;
-    display_name = "Debug Blend";
-    description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
+    display_name = "View Blend";
+    description = "View the blending factor that controls reuse of temporal information from previous frames.";
 }
 
 uniform_bool cfg_debug_marker {
     default = false;
-    display_name = "Debug Marker";
-    description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
-}
-
-uniform_bool cfg_debug_borrow {
-    default = false;
-    display_name = "Debug Borrow";
-    description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
+    display_name = "View Marker";
+    description = "View the world position marker used to perform rejection of temporal information.";
 }
 
 uniform_bool cfg_debug_samples {
     default = false;
-    display_name = "Debug Samples";
-    description = "Makes it easier to see the effect of your configuration changes on the occlusion by removing other lighting effects.";
+    display_name = "View Samples";
+    description = "View the number of samples (as a proportion of 'Max Samples') performed per-pixel during the last frame. Black = 0%, white = 100%.";
 }
 
 uniform_bool cfg_temporal_filter_when_paused {
@@ -192,7 +186,7 @@ shared {
     /* const float kernel[N] = float[](0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002); */
     /* const float taps[N] = float[](-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0); */
 
-    vec2 rcpResolution = omw.rcpResolution * 1.15 * UPSCALE_INV * cfg_blur_factor;
+    vec2 rcpResolution = omw.rcpResolution * cfg_blur_factor;
 
     vec3 norm_at(vec2 uv) {
         return (omw_Texture2D(omw_SamplerNormals, uv).xyz - 0.5) * 2.0;
@@ -233,7 +227,7 @@ shared {
     }
 }
 
-fragment ssao(target = ao_buf0, rt1 = ao_next) {
+fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
     omw_In vec2 omw_TexCoord;
 
     vec2 norm2_at(vec2 uv) {
@@ -258,10 +252,13 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
         /*     fract(marker_d) */
         /* ) * 0.2 + 0.75; */
 
+        vec3 to_wpos = normalize(wpos - omw.eyePos.xyz);
         vec2 marker = vec2(
             dot(sin(wpos.xyz * 0.075), vec3(1.0)),
             dot(sin(wpos.xyz * 0.075 + 3.1416), vec3(1.0))
         ) * 0.075 + 0.75;//noise_3d(wpos * 0.003 * marker_scale) * 0.4 + 0.6;
+
+        float temporal_factor = pow(cfg_temporal_filtering, 0.1);
 
         float ssao = 0.0;
         float last_ssao = 0.0;
@@ -296,7 +293,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
                     /*     } */
                     /* } */
                     last_ssao = last.x;
-                    blend_factor = cfg_temporal_filtering / (1.0 + max(0.0, vmax(abs(last.yz - marker)) * inv_depth - 0.000001) * 1000000.0);
+                    blend_factor = temporal_factor / (1.0 + max(0.0, vmax(abs(last.yz - marker)) * inv_depth - 0.000001) * 1000000.0);
                     samples = int(float(cfg_samples) * max(1.0 - blend_factor * 0.9, 0.0));
                 }
             }
@@ -312,7 +309,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
 
                 float depth2 = omw_GetLinearDepth(pos);
                 vec2 norm2 = norm2_at(pos);
-                float ignore = min(abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation, 1.0);
+                float ignore = min(abs(1.0 - depth2 * inv_depth) * sqrt(depth) * 0.1 * cfg_depth_compensation, 1.0);
                 float weight = 1.0;// - dist * ignore;
                 ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0) * cfg_normal_intensity) + cfg_threshold, 1.0, ignore);
                 total += weight;
@@ -321,32 +318,28 @@ fragment ssao(target = ao_buf0, rt1 = ao_next) {
             ssao /= total + 0.0001;
             //ssao = clamp(ssao * mix(0.9, 1.0, max(dot(wnorm, omw.sunPos.xyz), 0.0)), 0.0, 1.0);
 
-            float reject_changed = max(0.0, 1.0 - max(0.0, (ssao - last_ssao) / (last_ssao + 0.001) - 0.01) * 1000.0 * 0.025 * sqrt(inv_depth));
-            blend_factor *= reject_changed;
+            if (!cfg_debug_blend) {
+                // Reject samples when our new sampling differs substantially from the existing values (helps to eliminate ghosts)
+                float reject_changed = max(0.0, 1.0 - max(0.0, (ssao - last_ssao) / (last_ssao + 0.001) - 0.1) * 1000.0 * 0.025 * sqrt(inv_depth));
+                blend_factor *= reject_changed;
+            }
         }
 
         if (cfg_debug_blend) {
             ssao = blend_factor;
             blend_factor = 0.0;
         } else if (cfg_debug_marker) {
-            vec4 snorm = omw.projectionMatrix * vec4(norm, 0.0);
-            /* snorm.xyz /= snorm.w; */
-            snorm.xyz = normalize(snorm.xyz);
-            ssao = vmax(abs(last.yz - marker)) * 10000.0/*100000000000.0 * snorm.z*/ * inv_depth;//marker.x;
             ssao = marker.x;
-            blend_factor = 0.0;
-        } else if (cfg_debug_borrow) {
-            ssao = borrow;
             blend_factor = 0.0;
         } else if (cfg_debug_samples) {
             ssao = float(samples) / float(cfg_samples);
             blend_factor = 0.0;
         }
-        omw_FragColor = vec4(ssao * (1.0 - blend_factor) + last_ssao * blend_factor, marker, 1.0);
+        omw_FragColor = vec4(ssao * (1.0 - blend_factor) + last_ssao * blend_factor, marker, inv_depth);
     }
 }
 
-fragment copy(target = ao_next, rt1 = ao_buf0) {
+fragment copy(target = ao_next, rt1 = ao_buf0, blend = (add, one, zero)) {
     omw_In vec2 omw_TexCoord;
 
     void main() {
@@ -354,43 +347,40 @@ fragment copy(target = ao_next, rt1 = ao_buf0) {
     }
 }
 
-fragment blur_v(target = ao_buf1, rt1 = ao_buf0) {
+fragment depth_adjusted_blur(target = ao_buf1, rt1 = ao_buf0, blend = (add, one, zero)) {
     omw_In vec2 omw_TexCoord;
+
+    const int M = 12;
+    vec2 offsets[M] = vec2[](
+        vec2(-0.695914,0.457137), vec2(-0.203345,0.620716),
+        vec2(0.96234,-0.194983), vec2(0.473434,-0.480026),
+        vec2(0.507431,0.064425), vec2(0.89642,0.412458),
+        vec2(-0.32194,-0.932615), vec2(-0.791559,-0.59771),
+        vec2(-0.326212,-0.40581), vec2(-0.840144,-0.07358),
+        vec2(0.519456,0.767022), vec2(0.185461,-0.893124)
+    );
 
     void main()
     {
-        // No need to continue, blurring skips intermediate buffers
-        if (cfg_blur_factor == 0.0) {
-             omw_FragColor = vec4(vec3(omw_Texture2D(ao_buf0, omw_TexCoord).x), 1.0);
-        } else {
-            float ssao = 0.0;
-            for(int i = 0; i < N; i ++) {
-                ssao += omw_Texture2D(ao_buf0, omw_TexCoord + vec2(0.0, rcpResolution.y * taps[i])).x * kernel[i];
-            }
-            omw_FragColor = vec4(vec3(ssao), 1.0);
+        float total = omw_Texture2D(ao_buf0, omw_TexCoord).x;
+        float depth = omw_GetLinearDepth(omw_TexCoord);
+        float inv_depth = 1.0 / depth;
+        float rev = 4.0;/*blur_radius*/;
+        float amount = 1.0;
+        for (int i = 0; i < M; i++) {
+            vec2 s_uv = omw_TexCoord + rcpResolution * offsets[i] * rev;
+            float s_depth = omw_GetLinearDepth(s_uv);
+            float weight = exp2(-abs(depth - s_depth) * inv_depth * 50.0/*blur_falloff*/) * cfg_blur_factor;
+
+            amount += weight;
+            total += omw_Texture2D(ao_buf0, s_uv).x * weight;
         }
+
+        omw_FragColor = vec4(total / amount, 0.0, 0.0, 1.0);
     }
 }
 
-fragment blur_h(target = ao_buf0, rt1 = ao_buf1) {
-    omw_In vec2 omw_TexCoord;
-
-    void main()
-    {
-        // No need to continue, blurring skips intermediate buffers
-        if (cfg_blur_factor == 0.0) {
-             omw_FragColor = vec4(vec3(omw_Texture2D(ao_buf1, omw_TexCoord).x), 1.0);
-        } else {
-            float ssao = 0.0;
-            for(int i = 0; i < N; i ++) {
-                ssao += omw_Texture2D(ao_buf1, omw_TexCoord + vec2(rcpResolution.x * taps[i], 0.0)).x * kernel[i];
-            }
-            omw_FragColor = vec4(vec3(ssao), 1.0);
-        }
-    }
-}
-
-fragment combine(rt1 = ao_buf0) {
+fragment combine(rt1 = ao_buf1, blend = (add, one, zero)) {
     omw_In vec2 omw_TexCoord;
 
     void main() {
@@ -405,7 +395,7 @@ fragment combine(rt1 = ao_buf0) {
             }
         }
 
-        float ssao = omw_Texture2D(ao_buf0, omw_TexCoord).x;
+        float ssao = omw_Texture2D(ao_buf1, omw_TexCoord).x;
 
         if (!cfg_enabled) {
             ssao = 1.0;
@@ -418,12 +408,10 @@ fragment combine(rt1 = ao_buf0) {
 
         omw_FragColor = old_col;
     }
-
-    // passes = ssao, copy, blur_v, blur_h, combine;
 }
 
 technique {
-    passes = ssao, copy, blur_v, blur_h, combine;
+    passes = ssao, copy, depth_adjusted_blur, combine;
     version = "0.1";
     description = "Screen-space ambient occlusion for OpenMW. This mod is normal-aware, so make sure to install a normal map mod to get the best out of it.";
     author = "zesterer";
