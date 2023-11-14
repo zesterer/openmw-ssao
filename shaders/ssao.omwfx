@@ -63,12 +63,12 @@ uniform_float cfg_blur_factor {
 }
 
 uniform_float cfg_temporal_filtering {
-    default = 0.5;
+    default = 0.75;
     min = 0.0;
     max = 1.0;
     step = 0.1;
     display_name = "Temporal Filtering";
-    description = "The amount of AO sampling information reused from previous frames. Higher values massively improve AO quality at the cost of minor artifacts on moving scene elements.";
+    description = "The amount of AO sampling information reused from previous frames. Higher values improve both AO quality and performance at the cost of minor artifacts on moving scene elements.";
 }
 
 uniform_bool cfg_enabled {
