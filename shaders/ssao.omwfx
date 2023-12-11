@@ -1,5 +1,5 @@
 uniform_float cfg_intensity {
-    header = "Configuration";
+    header = "Parameters";
     default = 4.5;
     min = 0.0;
     max = 20.0;
@@ -69,6 +69,13 @@ uniform_float cfg_temporal_filtering {
     step = 0.1;
     display_name = "Temporal Filtering";
     description = "The amount of AO sampling information reused from previous frames. Higher values improve both AO quality and performance at the cost of minor artifacts on moving scene elements.";
+}
+
+uniform_bool cfg_enable_hands {
+    header = "Options";
+    default = true;
+    display_name = "Apply to Hands";
+    description = "Whether ambient occlusion is applied to hands.";
 }
 
 uniform_bool cfg_enabled {
@@ -323,6 +330,10 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
                 float reject_changed = max(0.0, 1.0 - max(0.0, (ssao - last_ssao) / (last_ssao + 0.001) - 0.1) * 1000.0 * 0.025 * sqrt(inv_depth));
                 blend_factor *= reject_changed;
             }
+        }
+
+        if (!cfg_enable_hands && depth < 40.0) {
+            ssao = smoothstep(1.0, ssao, min(depth * (1.0 / 60.0), 1.0));
         }
 
         if (cfg_debug_blend) {
