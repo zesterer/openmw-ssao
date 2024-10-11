@@ -9,7 +9,7 @@ uniform_float cfg_intensity {
 }
 
 uniform_int cfg_samples {
-    default = 80;
+    default = 30;
     min = 5;
     max = 400;
     step = 1;
