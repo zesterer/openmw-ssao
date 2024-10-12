@@ -18,7 +18,7 @@ uniform_int cfg_samples {
 }
 
 uniform_float cfg_radius {
-    default = 65.0;
+    default = 100.0;
     min = 2.0;
     max = 400.0;
     step = 1.0;
@@ -316,7 +316,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
 
                 float depth2 = omw_GetLinearDepth(pos);
                 vec2 norm2 = norm2_at(pos);
-                float ignore = min(abs(1.0 - depth2 * inv_depth) * sqrt(depth) * 0.1 * cfg_depth_compensation, 1.0);
+                float ignore = min(abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation, 1.0);
                 float weight = 1.0;// - dist * ignore;
                 ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0) * cfg_normal_intensity) + cfg_threshold, 1.0, ignore);
                 total += weight;
@@ -346,7 +346,8 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
             ssao = float(samples) / float(cfg_samples);
             blend_factor = 0.0;
         }
-        omw_FragColor = vec4(ssao * (1.0 - blend_factor) + last_ssao * blend_factor, marker, inv_depth);
+
+        omw_FragColor = vec4(mix(ssao, last_ssao, blend_factor), marker, inv_depth);
     }
 }
 
