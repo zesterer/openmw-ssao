@@ -283,7 +283,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
             ssao = 1.0;
         } else {
             samples = cfg_samples;
-            if (true/*cfg_temporal_filtering > 0.0*/) {
+            if (cfg_temporal_filtering > 0.0) {
                 vec4 prev_spos = (omw.projectionMatrix * (omw.prevViewMatrix * vec4(wpos, 1.0)));
                 prev_spos.xyz /= prev_spos.w;
 
@@ -292,13 +292,13 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
 
                     // If the marker was substantially out of range, try to repair the missing information by
                     // 'borrowing' from nearby pixels
-                    /* if (vmax(abs(last.yz - marker)) * inv_depth > 0.0001) { */
-                    /*     borrow = 1.0; */
-                    /*     for (int i = 0; i < BOX; i ++) { */
-                    /*         vec3 last2 = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5 + omw.rcpResolution * UPSCALE_INV * vec2(boxx[i], boxy[i])).xyz; */
-                    /*         if (vmax(abs(last2.yz - marker)) < vmax(abs(last.yz - marker))) { last = last2; } */
-                    /*     } */
-                    /* } */
+                    // if (vmax(abs(last.yz - marker)) * inv_depth > 0.0001) {
+                    //     borrow = 1.0;
+                    //     for (int i = 0; i < BOX; i ++) {
+                    //         vec3 last2 = omw_Texture2D(ao_next, prev_spos.xy * 0.5 + 0.5 + omw.rcpResolution * UPSCALE_INV * vec2(boxx[i], boxy[i])).xyz;
+                    //         if (vmax(abs(last2.yz - marker)) < vmax(abs(last.yz - marker))) { last = last2; }
+                    //     }
+                    // }
                     last_ssao = last.x;
                     blend_factor = temporal_factor / (1.0 + max(0.0, vmax(abs(last.yz - marker)) * inv_depth - 0.000001) * 1000000.0);
                     samples = int(float(cfg_samples) * max(1.0 - blend_factor * 0.9, 0.0));
@@ -306,7 +306,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
             }
 
             float t = hash_two(uvec2(omw_TexCoord * omw.resolution)) * 6.28318;
-            if (true /*cfg_temporal_filtering > 0.0*/) { t += fract(omw.simulationTime * t) * 6.28318; }
+            if (cfg_temporal_filtering > 0.0) { t += fract(omw.simulationTime * t) * 6.28318; }
             if (cfg_temporal_filter_when_paused) { t += omw_Texture2D(ao_next, omw_TexCoord).x * 10.0; }
             float total = 0.0;
             for (int i = 0; i <= samples; i ++) {
@@ -317,13 +317,12 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
                 float depth2 = omw_GetLinearDepth(pos);
                 vec2 norm2 = norm2_at(pos);
                 float ignore = min(abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation, 1.0);
-                float weight = 1.0;// - dist * ignore;
+                float weight = 1.0 - ignore;
                 ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0) * cfg_normal_intensity) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
             }
             ssao /= total + 0.0001;
-            //ssao = clamp(ssao * mix(0.9, 1.0, max(dot(wnorm, omw.sunPos.xyz), 0.0)), 0.0, 1.0);
 
             if (!cfg_debug_blend) {
                 // Reject samples when our new sampling differs substantially from the existing values (helps to eliminate ghosts)
@@ -374,6 +373,11 @@ fragment depth_adjusted_blur(target = ao_buf1, rt1 = ao_buf0, blend = (add, one,
 
     void main()
     {
+        if (cfg_blur_factor <= 0.0) {
+            omw_FragColor = vec4(omw_Texture2D(ao_buf0, omw_TexCoord).x, 0.0, 0.0, 1.0);
+            return;
+        }
+
         float total = omw_Texture2D(ao_buf0, omw_TexCoord).x;
         float depth = omw_GetLinearDepth(omw_TexCoord);
         float inv_depth = 1.0 / depth;
