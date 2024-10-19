@@ -153,8 +153,8 @@ render_target ao_buf1 {
 }
 
 render_target ao_next {
-    min_filter = linear;
-    mag_filter = linear;
+    min_filter = nearest;
+    mag_filter = nearest;
     wrap_s = clamp_to_edge;
     wrap_t = clamp_to_edge;
     width_ratio = 1.0;
@@ -261,8 +261,8 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
 
         vec3 to_wpos = normalize(wpos - omw.eyePos.xyz);
         vec2 marker = vec2(
-            dot(sin(wpos.xyz * 0.075), vec3(1.0)),
-            dot(sin(wpos.xyz * 0.075 + 3.1416), vec3(1.0))
+            dot(sin(wpos.xyz * 0.13), vec3(1.0)),
+            dot(sin(wpos.xyz * 0.27 + 3.1416), vec3(1.0))
         ) * 0.075 + 0.75;//noise_3d(wpos * 0.003 * marker_scale) * 0.4 + 0.6;
 
         float temporal_factor = pow(cfg_temporal_filtering, 0.1);
@@ -300,7 +300,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
                     //     }
                     // }
                     last_ssao = last.x;
-                    blend_factor = temporal_factor / (1.0 + max(0.0, vmax(abs(last.yz - marker)) * inv_depth - 0.000001) * 1000000.0);
+                    blend_factor = temporal_factor / (1.0 + max(0.0, vmax(abs(last.yz - marker)) * inv_depth - 0.000001) * 100000.0);
                     samples = int(float(cfg_samples) * max(1.0 - blend_factor * 0.9, 0.0));
                 }
             }
@@ -317,7 +317,7 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
                 float depth2 = omw_GetLinearDepth(pos);
                 vec2 norm2 = norm2_at(pos);
                 float ignore = min(abs(1.0 - depth2 * inv_depth) * cfg_depth_compensation, 1.0);
-                float weight = 1.0 - ignore;
+                float weight = 1.0;// - ignore;
                 ssao += weight * mix(0.01 / (0.01 + max(dot((norm.xy - norm2), offs), 0.0) * cfg_normal_intensity) + cfg_threshold, 1.0, ignore);
                 total += weight;
                 t += 3.88;
@@ -338,9 +338,6 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
         if (cfg_debug_blend) {
             ssao = blend_factor;
             blend_factor = 0.0;
-        } else if (cfg_debug_marker) {
-            ssao = marker.x;
-            blend_factor = 0.0;
         } else if (cfg_debug_samples) {
             ssao = float(samples) / float(cfg_samples);
             blend_factor = 0.0;
@@ -354,7 +351,8 @@ fragment copy(target = ao_next, rt1 = ao_buf0, blend = (add, one, zero)) {
     omw_In vec2 omw_TexCoord;
 
     void main() {
-        omw_FragColor = omw_Texture2D(ao_buf0, omw_TexCoord);
+        vec4 prev = omw_Texture2D(ao_buf0, omw_TexCoord);
+        omw_FragColor = prev;
     }
 }
 
@@ -396,7 +394,7 @@ fragment depth_adjusted_blur(target = ao_buf1, rt1 = ao_buf0, blend = (add, one,
     }
 }
 
-fragment combine(rt1 = ao_buf1, blend = (add, one, zero)) {
+fragment combine(rt1 = ao_buf1, rt2 = ao_buf0, blend = (add, one, zero)) {
     omw_In vec2 omw_TexCoord;
 
     void main() {
@@ -421,6 +419,10 @@ fragment combine(rt1 = ao_buf1, blend = (add, one, zero)) {
         /* old_col.rgb = vec3(noise_3d(vec3(omw_TexCoord.xyx) * 10.0), 1); */
 
         /* old_col.rgb = norm_at(omw_TexCoord); */
+
+        if (cfg_debug_marker) {
+            old_col = vec4(omw_Texture2D(ao_buf0, omw_TexCoord).yz, 0.0, 0.0);
+        }
 
         omw_FragColor = old_col;
     }
