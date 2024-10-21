@@ -1,5 +1,15 @@
 # High Quality Screen-Space Ambient Occlusion for OpenMW
 
+![A scene with only SSAO applied](https://i.imgur.com/KvtVvzj.png)
+
+<details>
+    <summary>More screenshots</summary>
+    <p>SSAO enabled</p>
+    <img src="https://i.imgur.com/93YEP5n.png" alt="SSAO enabled">
+    <p>SSAO disabled</p>
+    <img src="https://i.imgur.com/AbAsgZP.png" alt="SSAO disabled">
+</details>
+
 ## Features
 
 - Normal-aware: Unlike most SSAO shader mods, this shader takes the surface normal into account and so interacts
