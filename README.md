@@ -28,7 +28,7 @@ feel you're after.
 
 - **Behaves correctly with complex scenes**: No 'occlusion halo' artifacts, or ghost shadows.
 
-- **Crisp, sharp SSAO**: No 'bleeding' of SSAO in screen-space on to nearby vertices, blending is depth-aware.
+- **Crisp, sharp SSAO**: No 'bleeding' of SSAO in screen-space onto nearby surfaces, blending is depth-aware.
 
 - **Minimal flickering or shimmering**: Unlike many other SSAO shaders, this shader exhibits very little flickering,
 shimmering, or noise - even when the camera is moving quickly through complex scenes.

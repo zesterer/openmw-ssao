@@ -28,9 +28,9 @@ uniform_float cfg_radius {
 
 uniform_float cfg_threshold {
     default = 0.0;
-    min = -0.15;
-    max = 0.15;
-    step = 0.01;
+    min = -1.0;
+    max = 1.0;
+    step = 0.1;
     display_name = "Occlusion Threshold";
     description = "The approximate occlusion threshold at which shadowing begins to occur. Lower values cause surfaces without any occlusion to become occluded.";
 }
@@ -101,6 +101,12 @@ uniform_bool cfg_debug_marker {
     default = false;
     display_name = "View Marker";
     description = "View the world position marker used to perform rejection of temporal information.";
+}
+
+uniform_bool cfg_debug_normals {
+    default = false;
+    display_name = "View Normals";
+    description = "View the normals (i.e: direction) of surfaces in the world.";
 }
 
 uniform_bool cfg_debug_samples {
@@ -232,14 +238,14 @@ shared {
             fract(pos.z)
         );
     }
-}
-
-fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
-    omw_In vec2 omw_TexCoord;
 
     vec2 norm2_at(vec2 uv) {
         return vec2(omw_Texture2D(omw_SamplerNormals, uv).xy - 0.5) * 2.0;
     }
+}
+
+fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
+    omw_In vec2 omw_TexCoord;
 
     float vmax(vec2 v) { return max(v.x, v.y); }
 
@@ -316,11 +322,12 @@ fragment ssao(target = ao_buf0, rt1 = ao_next, blend = (add, one, zero)) {
 
                 float depth_factor = 1.0 - clamp((depth - depth2 + dot(offs, norm.xy) * depth) * 0.01, 0.0, 0.75);
                 float normal_factor = 1.0 / (1.0 + clamp(dot((norm.xy - norm2), offs), 0.0, 0.005) * 50.0);
-                ssao += weight * mix(mix(depth_factor, normal_factor, cfg_normal_intensity) + cfg_threshold, 1.0, ignore);
+                ssao += weight * mix(mix(depth_factor, normal_factor, cfg_normal_intensity), 1.0, ignore);
                 total += weight;
                 t += 3.88;
             }
             ssao /= total + 0.0001;
+            ssao = ssao * (1.0 - cfg_threshold * 0.1);
 
             if (!cfg_debug_blend) {
                 // Reject samples when our new sampling differs substantially from the existing values (helps to eliminate ghosts)
@@ -419,7 +426,11 @@ fragment combine(rt1 = ao_buf1, rt2 = ao_buf0, blend = (add, one, zero)) {
         /* old_col.rgb = norm_at(omw_TexCoord); */
 
         if (cfg_debug_marker) {
-            old_col = vec4(omw_Texture2D(ao_buf0, omw_TexCoord).yz, 0.0, 0.0);
+            old_col = vec4(omw_Texture2D(ao_buf0, omw_TexCoord).xyz, 0.0);
+        }
+
+        if (cfg_debug_normals) {
+            old_col = vec4(norm_at(omw_TexCoord).xyz, 0.0);
         }
 
         omw_FragColor = old_col;
